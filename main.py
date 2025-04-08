@@ -539,10 +539,10 @@ async def chk_command(client, message: Message):
         )
         return
 
-    if len(urls) > 15:
+    if len(urls) > 25:
         await message.reply(
             "⚠️ Limit Exceeded\n\n"
-            "Maximum 15 URLs allowed at once.\n"
+            "Maximum 25 URLs allowed at once.\n"
             "For bulk checking, use /txt command.", 
             reply_to_message_id=message.id
         )
