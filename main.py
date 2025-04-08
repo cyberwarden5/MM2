@@ -12,6 +12,7 @@ import cloudscraper
 import shlex
 import time
 from concurrent.futures import ThreadPoolExecutor
+import ssl
 
 # Suppress SSL verification warnings
 warnings.simplefilter('ignore', InsecureRequestWarning)
@@ -107,12 +108,18 @@ registered_users = set()
 # Executor for parallel processing
 executor = ThreadPoolExecutor(max_workers=10)
 
+# Create a custom SSL context that doesn't verify certificates
+ssl_context = ssl.create_default_context()
+ssl_context.check_hostname = False
+ssl_context.verify_mode = ssl.CERT_NONE
+
 async def check_gateway(url):
     """
     Enhanced gateway checking with advanced detection methods using cloudscraper
     """
     start_time = time.time()
     try:
+        # Create a custom scraper with SSL verification disabled
         scraper = cloudscraper.create_scraper(
             browser={
                 'browser': 'chrome',
@@ -121,11 +128,13 @@ async def check_gateway(url):
             }
         )
         
+        # Use the custom SSL context to avoid verification errors
         response = await asyncio.to_thread(
             lambda: scraper.get(
                 url,
                 timeout=10,  # Reduced timeout for faster checks
-                verify=False
+                verify=False,  # Disable SSL verification
+                allow_redirects=True
             )
         )
 
@@ -284,7 +293,7 @@ async def register_command(client, message: Message):
 
 @app.on_message(filters.command("search"))
 async def search_command(client, message: Message):
-    if message.from_user.id not in registered_users:
+    if message.from_user.id not in registered_users and message.from_user.id != ADMIN_ID:
         await message.reply(
             "🔒 Access Required\n\n"
             "Please register first with /register", 
@@ -322,8 +331,11 @@ async def search_command(client, message: Message):
                 query = args[1] + " " + args[2]
                 amount = 10
 
-        # Limit amount to reasonable values
-        amount = min(max(amount, 1), 30)
+        # Limit amount to reasonable values (higher for admin)
+        if message.from_user.id == ADMIN_ID:
+            amount = min(max(amount, 1), 100)
+        else:
+            amount = min(max(amount, 1), 30)
 
         status_msg = await message.reply(
             "🔍 Searching...\n"
@@ -378,14 +390,14 @@ async def search_command(client, message: Message):
         # Format results with improved styling
         if len(urls) <= 10:
             result_text = (
-                "🔍 Search Results\n\n"
-                f"Query: {query}\n"
-                f"Found: {len(urls)} URLs\n\n"
-                "URLs:\n"
+                "🔍 𝗦𝗲𝗮𝗿𝗰𝗵 𝗥𝗲𝘀𝘂𝗹𝘁𝘀\n\n"
+                f"📝 Query: `{query}`\n"
+                f"📊 Found: `{len(urls)}` URLs\n\n"
+                "🌐 URLs:\n"
             )
             
             for i, url in enumerate(urls, 1):
-                result_text += f"{i}. {url}\n"
+                result_text += f"{i}. `{url}`\n"
                 
             keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔍 Check All URLs", callback_data=f"check_all_{message.id}")]
@@ -406,9 +418,9 @@ async def search_command(client, message: Message):
             await message.reply_document(
                 document=file_name,
                 caption=(
-                    "🔍 Search Results\n\n"
-                    f"Query: {query}\n"
-                    f"Found: {len(urls)} URLs\n\n"
+                    "🔍 𝗦𝗲𝗮𝗿𝗰𝗵 𝗥𝗲𝘀𝘂𝗹𝘁𝘀\n\n"
+                    f"📝 Query: `{query}`\n"
+                    f"📊 Found: `{len(urls)}` URLs\n\n"
                     "Reply to this file with /txt to check all URLs."
                 ),
                 reply_to_message_id=message.id
@@ -419,7 +431,7 @@ async def search_command(client, message: Message):
     except Exception as e:
         await message.reply(
             f"❌ Error\n\n"
-            f"{str(e)}",
+            f"`{str(e)}`",
             reply_to_message_id=message.id
         )
 
@@ -433,7 +445,8 @@ async def check_all_callback(client, callback_query):
     for line in message.text.split('\n'):
         if line.strip().startswith(tuple('0123456789')) and '. ' in line:
             url = line.split('. ', 1)[1].strip()
-            if url.startswith('http'):
+            if url.startswith('`http') and url.endswith('`'):
+                url = url[1:-1]  # Remove backticks
                 urls.append(url)
     
     if not urls:
@@ -454,27 +467,27 @@ async def check_all_callback(client, callback_query):
         result = await check_gateway(url)
         if "error" in result:
             gateway_info = (
-                f"❌ Error Checking\n"
-                f"URL: {url}\n"
-                f"Error: {result['error']}\n"
-                f"Time: {result['response_time']}s\n\n"
+                f"❌ 𝗘𝗿𝗿𝗼𝗿 𝗖𝗵𝗲𝗰𝗸𝗶𝗻𝗴\n"
+                f"🔗 URL: `{url}`\n"
+                f"⚠️ Error: `{result['error']}`\n"
+                f"⏱️ Time: `{result['response_time']}s`\n\n"
             )
         else:
             gateway_info = (
-                f"✅ Gateway Check\n"
-                f"URL: {url}\n"
-                f"Gateways: {', '.join(result['gateways']) if result['gateways'] else 'None'}\n"
-                f"Captcha: {'Yes' if result['captcha']['detected'] else 'No'} "
-                f"({', '.join(result['captcha']['types']) if result['captcha']['detected'] else 'N/A'})\n"
-                f"Cloudflare: {'Yes' if result['cloudflare'] else 'No'}\n"
-                f"Security: {', '.join(result['security_features']) if result['security_features'] else 'Basic'}\n"
-                f"Status: {result['status_code']} {result['status_icon']}\n"
-                f"Time: {result['response_time']}s\n\n"
+                f"✅ 𝗚𝗮𝘁𝗲𝘄𝗮𝘆 𝗖𝗵𝗲𝗰𝗸\n"
+                f"🔗 URL: `{url}`\n"
+                f"💳 Gateways: `{', '.join(result['gateways']) if result['gateways'] else 'None'}`\n"
+                f"🤖 Captcha: `{'Yes' if result['captcha']['detected'] else 'No'}` "
+                f"(`{', '.join(result['captcha']['types']) if result['captcha']['detected'] else 'N/A'}`)\n"
+                f"⚡ Cloudflare: `{'Yes' if result['cloudflare'] else 'No'}`\n"
+                f"🛡️ Security: `{', '.join(result['security_features']) if result['security_features'] else 'Basic'}`\n"
+                f"📊 Status: `{result['status_code']}` {result['status_icon']}\n"
+                f"⏱️ Time: `{result['response_time']}s`\n\n"
             )
         
         results.append(gateway_info)
         
-        full_message = "🔍 Gateway Check Results\n\n" + "".join(results)
+        full_message = "🔍 𝗚𝗮𝘁𝗲𝘄𝗮𝘆 𝗖𝗵𝗲𝗰𝗸 𝗥𝗲𝘀𝘂𝗹𝘁𝘀\n\n" + "".join(results)
         
         try:
             await response.edit(full_message)
@@ -484,33 +497,52 @@ async def check_all_callback(client, callback_query):
 
 @app.on_message(filters.command("about"))
 async def about_command(client, message: Message):
+    is_admin = message.from_user.id == ADMIN_ID
+    
     about_text = (
         "✨ 𝗚𝗮𝘁𝗲𝘄𝗮𝘆 𝗖𝗵𝗲𝗰𝗸𝗲𝗿 𝗕𝗼𝘁 ✨\n\n"
         "Your ultimate tool for payment gateway detection.\n\n"
-        "🚀 Features:\n"
+        "🚀 𝗙𝗲𝗮𝘁𝘂𝗿𝗲𝘀:\n"
         "• Fast multi-URL checking\n"
         "• Bulk URL processing\n"
         "• Advanced gateway detection\n"
         "• Security analysis\n"
         "• URL search functionality\n\n"
-        "💳 Detectable Gateways:\n"
+        "💳 𝗗𝗲𝘁𝗲𝗰𝘁𝗮𝗯𝗹𝗲 𝗚𝗮𝘁𝗲𝘄𝗮𝘆𝘀:\n"
         "Stripe, Braintree, PayPal, Square, Amazon Pay, Klarna, Adyen, "
         "Authorize.net, Worldpay, Cybersource, 2Checkout, WooCommerce\n\n"
-        "🛡️ Security Checks:\n"
+        "🛡️ 𝗦𝗲𝗰𝘂𝗿𝗶𝘁𝘆 𝗖𝗵𝗲𝗰𝗸𝘀:\n"
         "• Captcha systems\n"
         "• Cloudflare protection\n"
         "• Payment security features\n\n"
-        "📌 Commands:\n"
+        "📌 𝗖𝗼𝗺𝗺𝗮𝗻𝗱𝘀:\n"
         "• /chk - Check URLs (up to 15)\n"
-        "• /txt - Process URLs from file\n"
-        "• /search - Find new URLs\n\n"
-        "🔍 Happy gateway hunting!"
+        "• /txt - Process bulk URLs from file\n"
+        "• /search - Find new URLs\n"
     )
+    
+    # Add admin commands if the user is an admin
+    if is_admin:
+        about_text += (
+            "• /ban - Ban a user (Admin only)\n\n"
+            "🔑 𝗔𝗱𝗺𝗶𝗻 𝗣𝗿𝗶𝘃𝗶𝗹𝗲𝗴𝗲𝘀:\n"
+            "• Unlimited URL checking\n"
+            "• Access to all user data\n"
+            "• Ban/unban capabilities\n\n"
+        )
+    else:
+        about_text += "\n"
+    
+    about_text += "🔍 Happy gateway hunting!"
+    
     await message.reply(about_text, reply_to_message_id=message.id)
 
 @app.on_message(filters.command("chk"))
 async def chk_command(client, message: Message):
-    if message.from_user.id not in registered_users:
+    user_id = message.from_user.id
+    is_admin = user_id == ADMIN_ID
+    
+    if user_id not in registered_users and not is_admin:
         await message.reply(
             "🔒 Access Required\n\n"
             "Please register first with /register", 
@@ -529,27 +561,28 @@ async def chk_command(client, message: Message):
 
     if not urls:
         await message.reply(
-            "🔍 URL Checker\n\n"
+            "🔍 𝗨𝗥𝗟 𝗖𝗵𝗲𝗰𝗸𝗲𝗿\n\n"
             "Usage:\n"
-            "/chk URL1 URL2 ...\n\n"
+            "`/chk URL1 URL2 ...`\n\n"
             "Examples:\n"
-            "• /chk https://example.com\n"
-            "• /chk https://site1.com https://site2.com",
+            "• `/chk https://example.com`\n"
+            "• `/chk https://site1.com https://site2.com`",
             reply_to_message_id=message.id
         )
         return
 
-    if len(urls) > 25:
+    # Check URL limit (no limit for admin)
+    if len(urls) > 15 and not is_admin:
         await message.reply(
-            "⚠️ Limit Exceeded\n\n"
-            "Maximum 25 URLs allowed at once.\n"
+            "⚠️ 𝗟𝗶𝗺𝗶𝘁 𝗘𝘅𝗰𝗲𝗲𝗱𝗲𝗱\n\n"
+            "Maximum 15 URLs allowed at once.\n"
             "For bulk checking, use /txt command.", 
             reply_to_message_id=message.id
         )
         return
 
     response = await message.reply(
-        "🔍 Gateway Checker\n\n"
+        "🔍 𝗚𝗮𝘁𝗲𝘄𝗮𝘆 𝗖𝗵𝗲𝗰𝗸𝗲𝗿\n\n"
         "Analyzing URLs... Please wait.", 
         reply_to_message_id=message.id
     )
@@ -560,27 +593,29 @@ async def chk_command(client, message: Message):
         result = await check_gateway(url)
         if "error" in result:
             gateway_info = (
-                f"❌ Error Checking\n"
-                f"URL: {url}\n"
-                f"Error: {result['error']}\n"
-                f"Time: {result['response_time']}s\n\n"
+                f"❌ 𝗘𝗿𝗿𝗼𝗿 𝗖𝗵𝗲𝗰𝗸𝗶𝗻𝗴\n"
+                f"🔗 URL: `{url}`\n"
+                f"⚠️ Error: `{result['error']}`\n"
+                f"⏱️ Time: `{result['response_time']}s`\n\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━\n\n"
             )
         else:
             gateway_info = (
-                f"✅ Gateway Check\n"
-                f"URL: {url}\n"
-                f"Gateways: {', '.join(result['gateways']) if result['gateways'] else 'None'}\n"
-                f"Captcha: {'Yes' if result['captcha']['detected'] else 'No'} "
-                f"({', '.join(result['captcha']['types']) if result['captcha']['detected'] else 'N/A'})\n"
-                f"Cloudflare: {'Yes' if result['cloudflare'] else 'No'}\n"
-                f"Security: {', '.join(result['security_features']) if result['security_features'] else 'Basic'}\n"
-                f"Status: {result['status_code']} {result['status_icon']}\n"
-                f"Time: {result['response_time']}s\n\n"
+                f"✅ 𝗚𝗮𝘁𝗲𝘄𝗮𝘆 𝗖𝗵𝗲𝗰𝗸\n"
+                f"🔗 URL: `{url}`\n"
+                f"💳 Gateways: `{', '.join(result['gateways']) if result['gateways'] else 'None'}`\n"
+                f"🤖 Captcha: `{'Yes' if result['captcha']['detected'] else 'No'}` "
+                f"(`{', '.join(result['captcha']['types']) if result['captcha']['detected'] else 'N/A'}`)\n"
+                f"⚡ Cloudflare: `{'Yes' if result['cloudflare'] else 'No'}`\n"
+                f"🛡️ Security: `{', '.join(result['security_features']) if result['security_features'] else 'Basic'}`\n"
+                f"📊 Status: `{result['status_code']}` {result['status_icon']}\n"
+                f"⏱️ Time: `{result['response_time']}s`\n\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━\n\n"
             )
         
         results.append(gateway_info)
         
-        full_message = "🔍 Gateway Check Results\n\n" + "".join(results)
+        full_message = "🔍 𝗚𝗮𝘁𝗲𝘄𝗮𝘆 𝗖𝗵𝗲𝗰𝗸 𝗥𝗲𝘀𝘂𝗹𝘁𝘀\n\n" + "".join(results)
         
         try:
             await response.edit(full_message)
@@ -590,7 +625,10 @@ async def chk_command(client, message: Message):
 
 @app.on_message(filters.command("txt") & filters.reply)
 async def txt_command(client, message: Message):
-    if message.from_user.id not in registered_users:
+    user_id = message.from_user.id
+    is_admin = user_id == ADMIN_ID
+    
+    if user_id not in registered_users and not is_admin:
         await message.reply(
             "🔒 Access Required\n\n"
             "Please register first with /register", 
@@ -601,13 +639,13 @@ async def txt_command(client, message: Message):
     replied_message = message.reply_to_message
     if not replied_message.document or not replied_message.document.file_name.endswith('.txt'):
         await message.reply(
-            "📄 Bulk URL Checker\n\n"
+            "📄 𝗕𝘂𝗹𝗸 𝗨𝗥𝗟 𝗖𝗵𝗲𝗰𝗸𝗲𝗿\n\n"
             "Usage:\n"
             "1. Upload a .txt file with URLs (one per line)\n"
             "2. Reply to the file with /txt\n\n"
             "Example file content:\n"
-            "https://example1.com\n"
-            "https://example2.com",
+            "`https://example1.com`\n"
+            "`https://example2.com`",
             reply_to_message_id=message.id
         )
         return
@@ -620,7 +658,7 @@ async def txt_command(client, message: Message):
 
     if not urls:
         await message.reply(
-            "❌ No Valid URLs\n\n"
+            "❌ 𝗡𝗼 𝗩𝗮𝗹𝗶𝗱 𝗨𝗥𝗟𝘀\n\n"
             "The file doesn't contain any valid URLs.\n"
             "Make sure each URL starts with http:// or https://", 
             reply_to_message_id=message.id
@@ -629,9 +667,9 @@ async def txt_command(client, message: Message):
 
     total_urls = len(urls)
     response = await message.reply(
-        f"📊 Bulk URL Checker\n\n"
-        f"Total URLs: {total_urls}\n"
-        f"Status: Starting check...\n\n"
+        f"📊 𝗕𝘂𝗹𝗸 𝗨𝗥𝗟 𝗖𝗵𝗲𝗰𝗸𝗲𝗿\n\n"
+        f"Total URLs: `{total_urls}`\n"
+        f"Status: `Starting check...`\n\n"
         f"This may take some time. Please wait.", 
         reply_to_message_id=message.id
     )
@@ -649,16 +687,16 @@ async def txt_command(client, message: Message):
             percentage = int((checked / total_urls) * 100)
             
             status_lines = [
-                f"📊 Bulk URL Checker\n\n"
-                f"Progress: [{progress_bar}] {percentage}%\n"
-                f"Checked: {checked}/{total_urls}\n"
-                f"Remaining: {remaining}\n\n"
+                f"📊 𝗕𝘂𝗹𝗸 𝗨𝗥𝗟 𝗖𝗵𝗲𝗰𝗸𝗲𝗿\n\n"
+                f"Progress: [`{progress_bar}`] `{percentage}%`\n"
+                f"Checked: `{checked}/{total_urls}`\n"
+                f"Remaining: `{remaining}`\n\n"
             ]
             
             if found_gateways:
-                status_lines.append("Gateways Found:\n")
+                status_lines.append("𝗚𝗮𝘁𝗲𝘄𝗮𝘆𝘀 𝗙𝗼𝘂𝗻𝗱:\n")
                 for gateway in sorted(found_gateways):
-                    status_lines.append(f"• {gateway}: {len(results[gateway])}\n")
+                    status_lines.append(f"• `{gateway}`: `{len(results[gateway])}`\n")
             
             status = "".join(status_lines)
             try:
@@ -690,9 +728,9 @@ async def txt_command(client, message: Message):
         if gateway_urls:
             # Format URLs in a clean, readable format
             if len(gateway_urls) <= 20:
-                url_list = '\n'.join(f"• {url}" for url in gateway_urls)
+                url_list = '\n'.join(f"• `{url}`" for url in gateway_urls)
                 result_text = (
-                    f"💳 {gateway} Gateways\n\n"
+                    f"💳 {gateway} 𝗚𝗮𝘁𝗲𝘄𝗮𝘆𝘀\n\n"
                     f"{url_list}\n\n"
                 )
                 await message.reply(result_text)
@@ -706,26 +744,71 @@ async def txt_command(client, message: Message):
                 await message.reply_document(
                     document=file_name,
                     caption=(
-                        f"💳 {gateway} Gateways\n\n"
-                        f"Total: {len(gateway_urls)} URLs"
+                        f"💳 {gateway} 𝗚𝗮𝘁𝗲𝘄𝗮𝘆𝘀\n\n"
+                        f"Total: `{len(gateway_urls)}` URLs"
                     )
                 )
                 os.remove(file_name)
 
     # Send final summary
     final_status = (
-        "✅ Bulk Check Complete\n\n"
-        f"Total URLs: {total_urls}\n\n"
+        "✅ 𝗕𝘂𝗹𝗸 𝗖𝗵𝗲𝗰𝗸 𝗖𝗼𝗺𝗽𝗹𝗲𝘁𝗲\n\n"
+        f"Total URLs: `{total_urls}`\n\n"
     )
 
     if found_gateways:
-        final_status += "Gateway Summary:\n"
+        final_status += "𝗚𝗮𝘁𝗲𝘄𝗮𝘆 𝗦𝘂𝗺𝗺𝗮𝗿𝘆:\n"
         for gateway in sorted(found_gateways):
-            final_status += f"• {gateway}: {len(results[gateway])}\n"
+            final_status += f"• `{gateway}`: `{len(results[gateway])}`\n"
     else:
         final_status += "No payment gateways found in the provided URLs."
 
     await response.edit(final_status)
+
+@app.on_message(filters.command("ban") & filters.user(ADMIN_ID))
+async def ban_command(client, message: Message):
+    try:
+        # Parse command arguments
+        args = message.text.split()
+        if len(args) != 2:
+            await message.reply(
+                "🔒 𝗕𝗮𝗻 𝗖𝗼𝗺𝗺𝗮𝗻𝗱\n\n"
+                "Usage:\n"
+                "`/ban <user_id>`\n\n"
+                "Example:\n"
+                "`/ban 123456789`",
+                reply_to_message_id=message.id
+            )
+            return
+
+        user_id = int(args[1])
+        
+        if user_id in registered_users:
+            registered_users.remove(user_id)
+            await message.reply(
+                "✅ 𝗕𝗮𝗻 𝗦𝘂𝗰𝗰𝗲𝘀𝘀𝗳𝘂𝗹\n\n"
+                f"User with ID `{user_id}` has been banned.", 
+                reply_to_message_id=message.id
+            )
+        else:
+            await message.reply(
+                "❌ 𝗕𝗮𝗻 𝗙𝗮𝗶𝗹𝗲𝗱\n\n"
+                f"User with ID `{user_id}` is not registered.", 
+                reply_to_message_id=message.id
+            )
+
+    except ValueError:
+        await message.reply(
+            "❌ 𝗜𝗻𝘃𝗮𝗹𝗶𝗱 𝗜𝗗\n\n"
+            "Please provide a valid numeric user ID.", 
+            reply_to_message_id=message.id
+        )
+    except Exception as e:
+        await message.reply(
+            "❌ 𝗘𝗿𝗿𝗼𝗿\n\n"
+            f"`{str(e)}`", 
+            reply_to_message_id=message.id
+        )
 
 # Create a simple web server for Render
 async def handle(request):
@@ -751,9 +834,6 @@ async def run_bot():
 
 # Main function to run both the web server and the bot
 if __name__ == "__main__":
-    loop = asyncio.get_event_loop()
-    
-    # Run both the web server and the  == "__main__":
     loop = asyncio.get_event_loop()
     
     # Run both the web server and the bot
