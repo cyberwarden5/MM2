@@ -1,0 +1,6 @@
+pyrogram
+tgcrypto
+aiohttp
+bs4
+cloudscraper
+urllib3
