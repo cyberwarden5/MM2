@@ -13,9 +13,13 @@ import shlex
 import time
 from concurrent.futures import ThreadPoolExecutor
 import ssl
+import certifi
+import requests
+from requests.packages.urllib3.exceptions import InsecureRequestWarning
 
-# Suppress SSL verification warnings
+# Suppress all SSL verification warnings
 warnings.simplefilter('ignore', InsecureRequestWarning)
+requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 
 # Bot configuration
 API_ID = 23883349
@@ -29,7 +33,7 @@ PORT = int(os.environ.get("PORT", 8080))
 # Initialize the bot
 app = Client("gateway_checker_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
-# Optimized gateway detection patterns (keeping only the most reliable ones)
+# Optimized gateway detection patterns
 GATEWAYS = {
     "Stripe": [
         r"<script[^>]*src=['\"]https?://js\.stripe\.com/v\d/['\"]",
@@ -108,18 +112,25 @@ registered_users = set()
 # Executor for parallel processing
 executor = ThreadPoolExecutor(max_workers=10)
 
-# Create a custom SSL context that doesn't verify certificates
-ssl_context = ssl.create_default_context()
-ssl_context.check_hostname = False
-ssl_context.verify_mode = ssl.CERT_NONE
+# Create a properly configured SSL context
+def create_ssl_unverified_context():
+    """Create an SSL context that doesn't verify certificates."""
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    return ctx
+
+# Configure the default SSL context for all requests
+ssl._create_default_https_context = create_ssl_unverified_context
 
 async def check_gateway(url):
     """
     Enhanced gateway checking with advanced detection methods using cloudscraper
+    with proper SSL verification handling
     """
     start_time = time.time()
     try:
-        # Create a custom scraper with SSL verification disabled
+        # Create a custom scraper with SSL verification disabled properly
         scraper = cloudscraper.create_scraper(
             browser={
                 'browser': 'chrome',
@@ -128,15 +139,24 @@ async def check_gateway(url):
             }
         )
         
-        # Use the custom SSL context to avoid verification errors
-        response = await asyncio.to_thread(
-            lambda: scraper.get(
+        # Use a function that properly handles SSL verification
+        def make_request(url):
+            session = requests.Session()
+            session.verify = False  # Disable SSL verification
+            adapter = requests.adapters.HTTPAdapter()
+            session.mount('https://', adapter)
+            
+            # Use the session with the scraper
+            scraper.session = session
+            return scraper.get(
                 url,
-                timeout=10,  # Reduced timeout for faster checks
-                verify=False,  # Disable SSL verification
+                timeout=15,
+                verify=False,
                 allow_redirects=True
             )
-        )
+        
+        # Execute the request in a thread to avoid blocking
+        response = await asyncio.to_thread(make_request, url)
 
         html = response.text
         status_code = response.status_code
@@ -226,7 +246,7 @@ async def check_gateway(url):
 @app.on_message(filters.command("start"))
 async def start_command(client, message: Message):
     user_id = message.from_user.id
-    if user_id not in registered_users:
+    if user_id not in registered_users and user_id != ADMIN_ID:
         start_text = (
             "✨ 𝗚𝗮𝘁𝗲𝘄𝗮𝘆 𝗖𝗵𝗲𝗰𝗸𝗲𝗿 𝗕𝗼𝘁 ✨\n\n"
             "🔍 Discover payment systems with precision\n\n"
@@ -242,17 +262,32 @@ async def start_command(client, message: Message):
         ])
         await message.reply(start_text, reply_markup=keyboard, reply_to_message_id=message.id)
     else:
-        welcome_back = (
-            "🌟 𝗪𝗲𝗹𝗰𝗼𝗺𝗲 𝗕𝗮𝗰𝗸!\n\n"
-            "Ready for more gateway discoveries?\n\n"
-            "📌 Commands:\n"
-            "• /chk - Check URLs\n"
-            "• /txt - Process bulk URLs\n"
-            "• /search - Find new URLs\n"
-            "• /about - Bot information\n\n"
-            "💫 Let's continue exploring!"
-        )
-        await message.reply(welcome_back, reply_to_message_id=message.id)
+        # Different welcome message for admin
+        if user_id == ADMIN_ID:
+            welcome_text = (
+                "👑 𝗔𝗱𝗺𝗶𝗻 𝗗𝗮𝘀𝗵𝗯𝗼𝗮𝗿𝗱\n\n"
+                "Welcome back, Admin!\n\n"
+                "📌 Admin Commands:\n"
+                "• /chk - Check URLs (unlimited)\n"
+                "• /txt - Process bulk URLs\n"
+                "• /search - Find new URLs\n"
+                "• /ban - Ban a user\n"
+                "• /about - Bot information\n\n"
+                "💫 Ready to manage the system?"
+            )
+            await message.reply(welcome_text, reply_to_message_id=message.id)
+        else:
+            welcome_back = (
+                "🌟 𝗪𝗲𝗹𝗰𝗼𝗺𝗲 𝗕𝗮𝗰𝗸!\n\n"
+                "Ready for more gateway discoveries?\n\n"
+                "📌 Commands:\n"
+                "• /chk - Check URLs\n"
+                "• /txt - Process bulk URLs\n"
+                "• /search - Find new URLs\n"
+                "• /about - Bot information\n\n"
+                "💫 Let's continue exploring!"
+            )
+            await message.reply(welcome_back, reply_to_message_id=message.id)
 
 @app.on_callback_query(filters.regex("^register$"))
 async def register_callback(client, callback_query):
@@ -262,13 +297,24 @@ async def register_callback(client, callback_query):
 @app.on_message(filters.command("register"))
 async def register_command(client, message: Message):
     user_id = message.from_user.id
+    
+    # Admin is automatically registered
+    if user_id == ADMIN_ID:
+        admin_msg = (
+            "👑 𝗔𝗱𝗺𝗶𝗻 𝗔𝗰𝗰𝗲𝘀𝘀\n\n"
+            "You already have full admin privileges.\n"
+            "All commands are available to you."
+        )
+        await message.reply(admin_msg, reply_to_message_id=message.id)
+        return
+        
     if user_id not in registered_users:
         registered_users.add(user_id)
         user_info = (
             "🆕 New User Alert!\n\n"
             f"👤 Name: {message.from_user.first_name}\n"
             f"🔖 Username: @{message.from_user.username}\n"
-            f"🆔 ID: {user_id}"
+            f"🆔 ID: `{user_id}`"
         )
         await client.send_message(ADMIN_ID, user_info)
         
@@ -293,7 +339,10 @@ async def register_command(client, message: Message):
 
 @app.on_message(filters.command("search"))
 async def search_command(client, message: Message):
-    if message.from_user.id not in registered_users and message.from_user.id != ADMIN_ID:
+    user_id = message.from_user.id
+    is_admin = user_id == ADMIN_ID
+    
+    if user_id not in registered_users and not is_admin:
         await message.reply(
             "🔒 Access Required\n\n"
             "Please register first with /register", 
@@ -302,43 +351,81 @@ async def search_command(client, message: Message):
         return
 
     try:
-        # Improved command parsing
-        args = message.text.split(maxsplit=2)
-        if len(args) < 2:
+        # Extract command text
+        command_text = message.text.strip()
+        
+        # Handle case where command is just "/search"
+        if command_text == "/search":
             await message.reply(
-                "🔎 Search Guide\n\n"
+                "🔎 𝗦𝗲𝗮𝗿𝗰𝗵 𝗚𝘂𝗶𝗱𝗲\n\n"
                 "Usage:\n"
-                "/search query [amount]\n\n"
+                "`/search query [amount]`\n\n"
                 "Examples:\n"
-                "• /search payment gateway 10\n"
-                "• /search site:example.com 5\n"
-                "• /search \"online checkout\"",
+                "• `/search payment gateway 10`\n"
+                "• `/search site:example.com 5`\n"
+                "• `/search \"online checkout\"`",
                 reply_to_message_id=message.id
             )
             return
-
-        # Extract query and amount
-        if len(args) == 2:
-            query = args[1]
-            amount = 10
-        else:
-            # Check if the last word is a number
-            parts = args[2].split()
-            if parts[-1].isdigit():
-                amount = int(parts[-1])
-                query = args[1] + " " + " ".join(parts[:-1])
+            
+        # Parse command with better handling for quoted strings
+        parts = []
+        current_part = ""
+        in_quotes = False
+        
+        for char in command_text[7:]:  # Skip "/search "
+            if char == '"' and not in_quotes:
+                in_quotes = True
+            elif char == '"' and in_quotes:
+                in_quotes = False
+                if current_part:
+                    parts.append(current_part)
+                    current_part = ""
+            elif char.isspace() and not in_quotes:
+                if current_part:
+                    parts.append(current_part)
+                    current_part = ""
             else:
-                query = args[1] + " " + args[2]
-                amount = 10
+                current_part += char
+                
+        if current_part:
+            parts.append(current_part)
+            
+        # Extract query and amount
+        if not parts:
+            await message.reply(
+                "🔎 𝗦𝗲𝗮𝗿𝗰𝗵 𝗚𝘂𝗶𝗱𝗲\n\n"
+                "Please provide a search query.\n\n"
+                "Usage: `/search query [amount]`",
+                reply_to_message_id=message.id
+            )
+            return
+            
+        query = parts[0]
+        amount = 10  # Default
+        
+        # Check if last part is a number
+        if len(parts) > 1 and parts[-1].isdigit():
+            amount = int(parts[-1])
+            if len(parts) > 2:
+                # If we have more than 2 parts and the last is a number,
+                # join all parts except the last as the query
+                query = " ".join(parts[:-1])
+        elif len(parts) > 1:
+            # If we have multiple parts but the last isn't a number,
+            # join all parts as the query
+            query = " ".join(parts)
 
         # Limit amount to reasonable values (higher for admin)
-        if message.from_user.id == ADMIN_ID:
+        if is_admin:
             amount = min(max(amount, 1), 100)
         else:
             amount = min(max(amount, 1), 30)
 
         status_msg = await message.reply(
-            "🔍 Searching...\n"
+            "🔍 𝗦𝗲𝗮𝗿𝗰𝗵𝗶𝗻𝗴...\n\n"
+            f"Query: `{query}`\n"
+            f"Amount: `{amount}`\n\n"
             "Please wait while I find the best URLs.",
             reply_to_message_id=message.id
         )
@@ -351,7 +438,7 @@ async def search_command(client, message: Message):
         urls = []
         search_params = {
             'q': query,
-            'num': amount,
+            'num': min(amount, 10),  # Google typically limits to 10 results per page
             'hl': 'en',
             'gl': 'us',
             'safe': 'off',
@@ -360,30 +447,101 @@ async def search_command(client, message: Message):
         async with aiohttp.ClientSession() as session:
             for start in range(0, amount, 10):
                 search_params['start'] = start
-                async with session.get('https://www.google.com/search', params=search_params, headers=headers) as response:
-                    if response.status == 200:
-                        html_content = await response.text()
-                        soup = BeautifulSoup(html_content, 'html.parser')
-                        search_results = soup.find_all('div', class_='yuRUbf')
-                        
-                        for result in search_results:
-                            url_tag = result.find('a')
-                            if url_tag and 'href' in url_tag.attrs:
-                                url = url_tag['href']
-                                if url not in urls:
+                try:
+                    async with session.get('https://www.google.com/search', 
+                                          params=search_params, 
+                                          headers=headers,
+                                          ssl=False) as response:  # Disable SSL verification
+                        if response.status == 200:
+                            html_content = await response.text()
+                            soup = BeautifulSoup(html_content, 'html.parser')
+                            
+                            # Try different selectors for Google search results
+                            search_results = soup.find_all('div', class_='yuRUbf')
+                            
+                            # If the primary selector doesn't work, try alternatives
+                            if not search_results:
+                                search_results = soup.find_all('a', href=re.compile(r'^https?://'))
+                            
+                            for result in search_results:
+                                url = None
+                                if hasattr(result, 'find') and result.find('a'):
+                                    url = result.find('a').get('href')
+                                elif 'href' in result.attrs:
+                                    url = result['href']
+                                    
+                                if url and url.startswith(('http://', 'https://')) and url not in urls:
                                     urls.append(url)
                                     if len(urls) >= amount:
                                         break
-                    
-                    if len(urls) >= amount:
-                        break
+                        else:
+                            await status_msg.edit(
+                                f"⚠️ Search API returned status code: {response.status}\n"
+                                "Trying alternative method..."
+                            )
+                            break
+                except Exception as e:
+                    await status_msg.edit(
+                        f"⚠️ Error during search: `{str(e)}`\n"
+                        "Trying alternative method..."
+                    )
+                    break
+                
+                if len(urls) >= amount:
+                    break
                 
                 await asyncio.sleep(1)  # Avoid rate limiting
+            
+            # If we couldn't get results, try an alternative method
+            if not urls:
+                try:
+                    # Use a more direct approach with cloudscraper
+                    scraper = cloudscraper.create_scraper(
+                        browser={
+                            'browser': 'chrome',
+                            'platform': 'windows',
+                            'mobile': False
+                        }
+                    )
+                    
+                    def search_google(query, amount):
+                        results = []
+                        for start in range(0, amount, 10):
+                            params = {
+                                'q': query,
+                                'num': 10,
+                                'hl': 'en',
+                                'start': start
+                            }
+                            response = scraper.get(
+                                'https://www.google.com/search',
+                                params=params,
+                                headers=headers,
+                                verify=False
+                            )
+                            
+                            if response.status_code == 200:
+                                soup = BeautifulSoup(response.text, 'html.parser')
+                                for a in soup.find_all('a', href=True):
+                                    href = a['href']
+                                    if href.startswith('/url?q='):
+                                        url = href.split('/url?q=')[1].split('&')[0]
+                                        if url.startswith(('http://', 'https://')) and url not in results:
+                                            results.append(url)
+                                            if len(results) >= amount:
+                                                return results
+                        return results
+                    
+                    urls = await asyncio.to_thread(search_google, query, amount)
+                except Exception as e:
+                    await status_msg.edit(
+                        f"❌ Search failed: `{str(e)}`"
+                    )
 
         if not urls:
             await status_msg.edit(
-                "❌ No Results Found\n\n"
-                "Try a different search query."
+                "❌ 𝗡𝗼 𝗥𝗲𝘀𝘂𝗹𝘁𝘀 𝗙𝗼𝘂𝗻𝗱\n\n"
+                "Try a different search query or check your internet connection."
             )
             return
 
@@ -430,8 +588,9 @@ async def search_command(client, message: Message):
 
     except Exception as e:
         await message.reply(
-            f"❌ Error\n\n"
-            f"`{str(e)}`",
+            f"❌ 𝗘𝗿𝗿𝗼𝗿\n\n"
+            f"`{str(e)}`\n\n"
+            "Please try again with a different query.",
             reply_to_message_id=message.id
         )
 
@@ -457,13 +616,14 @@ async def check_all_callback(client, callback_query):
     
     # Create a new message for results
     response = await message.reply(
-        "🔍 Checking Gateways...\n"
+        "🔍 𝗖𝗵𝗲𝗰𝗸𝗶𝗻𝗴 𝗚𝗮𝘁𝗲𝘄𝗮𝘆𝘀...\n\n"
+        f"Total URLs: `{len(urls)}`\n"
         "Please wait while I analyze the URLs."
     )
     
     # Process URLs (reuse the chk_command logic)
     results = []
-    for url in urls:
+    for i, url in enumerate(urls, 1):
         result = await check_gateway(url)
         if "error" in result:
             gateway_info = (
@@ -471,10 +631,11 @@ async def check_all_callback(client, callback_query):
                 f"🔗 URL: `{url}`\n"
                 f"⚠️ Error: `{result['error']}`\n"
                 f"⏱️ Time: `{result['response_time']}s`\n\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━\n\n"
             )
         else:
             gateway_info = (
-                f"✅ 𝗚𝗮𝘁𝗲𝘄𝗮𝘆 𝗖𝗵𝗲𝗰𝗸\n"
+                f"✅ 𝗚𝗮𝘁𝗲𝘄𝗮𝘆 𝗖𝗵𝗲𝗰𝗸 #{i}\n"
                 f"🔗 URL: `{url}`\n"
                 f"💳 Gateways: `{', '.join(result['gateways']) if result['gateways'] else 'None'}`\n"
                 f"🤖 Captcha: `{'Yes' if result['captcha']['detected'] else 'No'}` "
@@ -483,57 +644,82 @@ async def check_all_callback(client, callback_query):
                 f"🛡️ Security: `{', '.join(result['security_features']) if result['security_features'] else 'Basic'}`\n"
                 f"📊 Status: `{result['status_code']}` {result['status_icon']}\n"
                 f"⏱️ Time: `{result['response_time']}s`\n\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━\n\n"
             )
         
         results.append(gateway_info)
         
-        full_message = "🔍 𝗚𝗮𝘁𝗲𝘄𝗮𝘆 𝗖𝗵𝗲𝗰𝗸 𝗥𝗲𝘀𝘂𝗹𝘁𝘀\n\n" + "".join(results)
-        
-        try:
-            await response.edit(full_message)
-        except Exception:
-            # If message is too long, create a new message
-            response = await message.reply(full_message)
+        # Update the message periodically to show progress
+        if i % 3 == 0 or i == len(urls):
+            full_message = f"🔍 𝗚𝗮𝘁𝗲𝘄𝗮𝘆 𝗖𝗵𝗲𝗰𝗸 𝗥𝗲𝘀𝘂𝗹𝘁𝘀 ({i}/{len(urls)})\n\n" + "".join(results)
+            
+            try:
+                await response.edit(full_message)
+            except Exception as e:
+                # If message is too long, create a new message
+                response = await message.reply(
+                    f"🔍 𝗚𝗮𝘁𝗲𝘄𝗮𝘆 𝗖𝗵𝗲𝗰𝗸 𝗥𝗲𝘀𝘂𝗹𝘁𝘀 ({i}/{len(urls)})\n\n" + 
+                    "".join(results[-3:]) +  # Show only the last 3 results
+                    f"\n\n(Showing last 3 of {i} results due to message size limits)"
+                )
+                results = results[-3:]  # Keep only the last 3 results
 
 @app.on_message(filters.command("about"))
 async def about_command(client, message: Message):
     is_admin = message.from_user.id == ADMIN_ID
     
-    about_text = (
-        "✨ 𝗚𝗮𝘁𝗲𝘄𝗮𝘆 𝗖𝗵𝗲𝗰𝗸𝗲𝗿 𝗕𝗼𝘁 ✨\n\n"
-        "Your ultimate tool for payment gateway detection.\n\n"
-        "🚀 𝗙𝗲𝗮𝘁𝘂𝗿𝗲𝘀:\n"
-        "• Fast multi-URL checking\n"
-        "• Bulk URL processing\n"
-        "• Advanced gateway detection\n"
-        "• Security analysis\n"
-        "• URL search functionality\n\n"
-        "💳 𝗗𝗲𝘁𝗲𝗰𝘁𝗮𝗯𝗹𝗲 𝗚𝗮𝘁𝗲𝘄𝗮𝘆𝘀:\n"
-        "Stripe, Braintree, PayPal, Square, Amazon Pay, Klarna, Adyen, "
-        "Authorize.net, Worldpay, Cybersource, 2Checkout, WooCommerce\n\n"
-        "🛡️ 𝗦𝗲𝗰𝘂𝗿𝗶𝘁𝘆 𝗖𝗵𝗲𝗰𝗸𝘀:\n"
-        "• Captcha systems\n"
-        "• Cloudflare protection\n"
-        "• Payment security features\n\n"
-        "📌 𝗖𝗼𝗺𝗺𝗮𝗻𝗱𝘀:\n"
-        "• /chk - Check URLs (up to 15)\n"
-        "• /txt - Process bulk URLs from file\n"
-        "• /search - Find new URLs\n"
-    )
-    
-    # Add admin commands if the user is an admin
+    # Different about text for admin vs regular users
     if is_admin:
-        about_text += (
-            "• /ban - Ban a user (Admin only)\n\n"
-            "🔑 𝗔𝗱𝗺𝗶𝗻 𝗣𝗿𝗶𝘃𝗶𝗹𝗲𝗴𝗲𝘀:\n"
-            "• Unlimited URL checking\n"
-            "• Access to all user data\n"
-            "• Ban/unban capabilities\n\n"
+        about_text = (
+            "✨ 𝗚𝗮𝘁𝗲𝘄𝗮𝘆 𝗖𝗵𝗲𝗰𝗸𝗲𝗿 𝗕𝗼𝘁 ✨\n\n"
+            "Your ultimate tool for payment gateway detection.\n\n"
+            "🚀 𝗙𝗲𝗮𝘁𝘂𝗿𝗲𝘀:\n"
+            "• Fast multi-URL checking\n"
+            "• Bulk URL processing\n"
+            "• Advanced gateway detection\n"
+            "• Security analysis\n"
+            "• URL search functionality\n\n"
+            "💳 𝗗𝗲𝘁𝗲𝗰𝘁𝗮𝗯𝗹𝗲 𝗚𝗮𝘁𝗲𝘄𝗮𝘆𝘀:\n"
+            "Stripe, Braintree, PayPal, Square, Amazon Pay, Klarna, Adyen, "
+            "Authorize.net, Worldpay, Cybersource, 2Checkout, WooCommerce\n\n"
+            "🛡️ 𝗦𝗲𝗰𝘂𝗿𝗶𝘁𝘆 𝗖𝗵𝗲𝗰𝗸𝘀:\n"
+            "• Captcha systems\n"
+            "• Cloudflare protection\n"
+            "• Payment security features\n\n"
+            "📌 𝗔𝗱𝗺𝗶𝗻 𝗖𝗼𝗺𝗺𝗮𝗻𝗱𝘀:\n"
+            "• /chk - Check URLs (unlimited)\n"
+            "• /txt - Process bulk URLs\n"
+            "• /search - Find new URLs\n"
+            "• /ban - Ban a user\n\n"
+            "🔧 𝗧𝗲𝗰𝗵𝗻𝗶𝗰𝗮𝗹 𝗜𝗻𝗳𝗼:\n"
+            "• SSL verification disabled for maximum compatibility\n"
+            "• Parallel processing for faster results\n"
+            "• Advanced pattern matching algorithms\n\n"
+            "🔍 Happy gateway hunting!"
         )
     else:
-        about_text += "\n"
-    
-    about_text += "🔍 Happy gateway hunting!"
+        about_text = (
+            "✨ 𝗚𝗮𝘁𝗲𝘄𝗮𝘆 𝗖𝗵𝗲𝗰𝗸𝗲𝗿 𝗕𝗼𝘁 ✨\n\n"
+            "Your ultimate tool for payment gateway detection.\n\n"
+            "🚀 𝗙𝗲𝗮𝘁𝘂𝗿𝗲𝘀:\n"
+            "• Fast multi-URL checking\n"
+            "• Bulk URL processing\n"
+            "• Advanced gateway detection\n"
+            "• Security analysis\n"
+            "• URL search functionality\n\n"
+            "💳 𝗗𝗲𝘁𝗲𝗰𝘁𝗮𝗯𝗹𝗲 𝗚𝗮𝘁𝗲𝘄𝗮𝘆𝘀:\n"
+            "Stripe, Braintree, PayPal, Square, Amazon Pay, Klarna, Adyen, "
+            "Authorize.net, Worldpay, Cybersource, 2Checkout, WooCommerce\n\n"
+            "🛡️ 𝗦𝗲𝗰𝘂𝗿𝗶𝘁𝘆 𝗖𝗵𝗲𝗰𝗸𝘀:\n"
+            "• Captcha systems\n"
+            "• Cloudflare protection\n"
+            "• Payment security features\n\n"
+            "📌 𝗖𝗼𝗺𝗺𝗮𝗻𝗱𝘀:\n"
+            "• /chk - Check URLs (up to 15)\n"
+            "• /txt - Process bulk URLs\n"
+            "• /search - Find new URLs\n\n"
+            "🔍 Happy gateway hunting!"
+        )
     
     await message.reply(about_text, reply_to_message_id=message.id)
 
@@ -583,17 +769,18 @@ async def chk_command(client, message: Message):
 
     response = await message.reply(
         "🔍 𝗚𝗮𝘁𝗲𝘄𝗮𝘆 𝗖𝗵𝗲𝗰𝗸𝗲𝗿\n\n"
-        "Analyzing URLs... Please wait.", 
+        f"Total URLs: `{len(urls)}`\n"
+        "Analyzing... Please wait.", 
         reply_to_message_id=message.id
     )
     
     results = []
 
-    for url in urls:
+    for i, url in enumerate(urls, 1):
         result = await check_gateway(url)
         if "error" in result:
             gateway_info = (
-                f"❌ 𝗘𝗿𝗿𝗼𝗿 𝗖𝗵𝗲𝗰𝗸𝗶𝗻𝗴\n"
+                f"❌ 𝗘𝗿𝗿𝗼𝗿 𝗖𝗵𝗲𝗰𝗸𝗶𝗻𝗴 #{i}\n"
                 f"🔗 URL: `{url}`\n"
                 f"⚠️ Error: `{result['error']}`\n"
                 f"⏱️ Time: `{result['response_time']}s`\n\n"
@@ -601,7 +788,7 @@ async def chk_command(client, message: Message):
             )
         else:
             gateway_info = (
-                f"✅ 𝗚𝗮𝘁𝗲𝘄𝗮𝘆 𝗖𝗵𝗲𝗰𝗸\n"
+                f"✅ 𝗚𝗮𝘁𝗲𝘄𝗮𝘆 𝗖𝗵𝗲𝗰𝗸 #{i}\n"
                 f"🔗 URL: `{url}`\n"
                 f"💳 Gateways: `{', '.join(result['gateways']) if result['gateways'] else 'None'}`\n"
                 f"🤖 Captcha: `{'Yes' if result['captcha']['detected'] else 'No'}` "
@@ -615,13 +802,20 @@ async def chk_command(client, message: Message):
         
         results.append(gateway_info)
         
-        full_message = "🔍 𝗚𝗮𝘁𝗲𝘄𝗮𝘆 𝗖𝗵𝗲𝗰𝗸 𝗥𝗲𝘀𝘂𝗹𝘁𝘀\n\n" + "".join(results)
-        
-        try:
-            await response.edit(full_message)
-        except Exception:
-            # If message is too long, create a new message
-            response = await message.reply(full_message)
+        # Update the message periodically to show progress
+        if i % 3 == 0 or i == len(urls):
+            full_message = f"🔍 𝗚𝗮𝘁𝗲𝘄𝗮𝘆 𝗖𝗵𝗲𝗰𝗸 𝗥𝗲𝘀𝘂𝗹𝘁𝘀 ({i}/{len(urls)})\n\n" + "".join(results)
+            
+            try:
+                await response.edit(full_message)
+            except Exception as e:
+                # If message is too long, create a new message
+                response = await message.reply(
+                    f"🔍 𝗚𝗮𝘁𝗲𝘄𝗮𝘆 𝗖𝗵𝗲𝗰𝗸 𝗥𝗲𝘀𝘂𝗹𝘁𝘀 ({i}/{len(urls)})\n\n" + 
+                    "".join(results[-3:]) +  # Show only the last 3 results
+                    f"\n\n(Showing last 3 of {i} results due to message size limits)"
+                )
+                results = results[-3:]  # Keep only the last 3 results
 
 @app.on_message(filters.command("txt") & filters.reply)
 async def txt_command(client, message: Message):
