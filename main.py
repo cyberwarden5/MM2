@@ -219,9 +219,9 @@ async def start_command(client, message: Message):
     user_id = message.from_user.id
     if user_id not in registered_users:
         start_text = (
-            "✨ <b>𝗚𝗮𝘁𝗲𝘄𝗮𝘆 𝗖𝗵𝗲𝗰𝗸𝗲𝗿 𝗕𝗼𝘁</b> ✨\n\n"
-            "🔍 <b>Discover payment systems with precision</b>\n\n"
-            "🚀 <b>Quick Start:</b>\n"
+            "✨ 𝗚𝗮𝘁𝗲𝘄𝗮𝘆 𝗖𝗵𝗲𝗰𝗸𝗲𝗿 𝗕𝗼𝘁 ✨\n\n"
+            "🔍 Discover payment systems with precision\n\n"
+            "🚀 Quick Start:\n"
             "• Register with /register\n"
             "• Check URLs with /chk\n"
             "• Process bulk URLs with /txt\n"
@@ -231,19 +231,19 @@ async def start_command(client, message: Message):
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("✅ Register Now", callback_data="register")]
         ])
-        await message.reply(start_text, reply_markup=keyboard, reply_to_message_id=message.id, parse_mode="HTML")
+        await message.reply(start_text, reply_markup=keyboard, reply_to_message_id=message.id)
     else:
         welcome_back = (
-            "🌟 <b>𝗪𝗲𝗹𝗰𝗼𝗺𝗲 𝗕𝗮𝗰𝗸!</b>\n\n"
+            "🌟 𝗪𝗲𝗹𝗰𝗼𝗺𝗲 𝗕𝗮𝗰𝗸!\n\n"
             "Ready for more gateway discoveries?\n\n"
-            "📌 <b>Commands:</b>\n"
+            "📌 Commands:\n"
             "• /chk - Check URLs\n"
             "• /txt - Process bulk URLs\n"
             "• /search - Find new URLs\n"
             "• /about - Bot information\n\n"
             "💫 Let's continue exploring!"
         )
-        await message.reply(welcome_back, reply_to_message_id=message.id, parse_mode="HTML")
+        await message.reply(welcome_back, reply_to_message_id=message.id)
 
 @app.on_callback_query(filters.regex("^register$"))
 async def register_callback(client, callback_query):
@@ -256,40 +256,39 @@ async def register_command(client, message: Message):
     if user_id not in registered_users:
         registered_users.add(user_id)
         user_info = (
-            "🆕 <b>New User Alert!</b>\n\n"
-            f"👤 <b>Name:</b> {message.from_user.first_name}\n"
-            f"🔖 <b>Username:</b> @{message.from_user.username}\n"
-            f"🆔 <b>ID:</b> <code>{user_id}</code>"
+            "🆕 New User Alert!\n\n"
+            f"👤 Name: {message.from_user.first_name}\n"
+            f"🔖 Username: @{message.from_user.username}\n"
+            f"🆔 ID: {user_id}"
         )
-        await client.send_message(ADMIN_ID, user_info, parse_mode="HTML")
+        await client.send_message(ADMIN_ID, user_info)
         
         success_msg = (
-            "✅ <b>𝗥𝗲𝗴𝗶𝘀𝘁𝗿𝗮𝘁𝗶𝗼𝗻 𝗦𝘂𝗰𝗰𝗲𝘀𝘀𝗳𝘂𝗹!</b>\n\n"
+            "✅ 𝗥𝗲𝗴𝗶𝘀𝘁𝗿𝗮𝘁𝗶𝗼𝗻 𝗦𝘂𝗰𝗰𝗲𝘀𝘀𝗳𝘂𝗹!\n\n"
             "Welcome to the Gateway Checker Bot!\n\n"
-            "📌 <b>Available Commands:</b>\n"
+            "📌 Available Commands:\n"
             "• /chk - Check URLs\n"
             "• /txt - Process bulk URLs\n"
             "• /search - Find new URLs\n"
             "• /about - Bot information\n\n"
             "🚀 Ready to start checking!"
         )
-        await message.reply(success_msg, reply_to_message_id=message.id, parse_mode="HTML")
+        await message.reply(success_msg, reply_to_message_id=message.id)
     else:
         already_reg = (
-            "ℹ️ <b>Already Registered</b>\n\n"
+            "ℹ️ Already Registered\n\n"
             "You're already set up and ready to go!\n"
             "Use /about for more information."
         )
-        await message.reply(already_reg, reply_to_message_id=message.id, parse_mode="HTML")
+        await message.reply(already_reg, reply_to_message_id=message.id)
 
 @app.on_message(filters.command("search"))
 async def search_command(client, message: Message):
     if message.from_user.id not in registered_users:
         await message.reply(
-            "🔒 <b>Access Required</b>\n\n"
+            "🔒 Access Required\n\n"
             "Please register first with /register", 
-            reply_to_message_id=message.id,
-            parse_mode="HTML"
+            reply_to_message_id=message.id
         )
         return
 
@@ -298,15 +297,14 @@ async def search_command(client, message: Message):
         args = message.text.split(maxsplit=2)
         if len(args) < 2:
             await message.reply(
-                "🔎 <b>Search Guide</b>\n\n"
-                "<b>Usage:</b>\n"
-                "<code>/search query [amount]</code>\n\n"
-                "<b>Examples:</b>\n"
-                "• <code>/search payment gateway 10</code>\n"
-                "• <code>/search site:example.com 5</code>\n"
-                "• <code>/search \"online checkout\"</code>",
-                reply_to_message_id=message.id,
-                parse_mode="HTML"
+                "🔎 Search Guide\n\n"
+                "Usage:\n"
+                "/search query [amount]\n\n"
+                "Examples:\n"
+                "• /search payment gateway 10\n"
+                "• /search site:example.com 5\n"
+                "• /search \"online checkout\"",
+                reply_to_message_id=message.id
             )
             return
 
@@ -328,10 +326,9 @@ async def search_command(client, message: Message):
         amount = min(max(amount, 1), 30)
 
         status_msg = await message.reply(
-            "🔍 <b>Searching...</b>\n"
+            "🔍 Searching...\n"
             "Please wait while I find the best URLs.",
-            reply_to_message_id=message.id,
-            parse_mode="HTML"
+            reply_to_message_id=message.id
         )
 
         # Improved search with better user agent and parameters
@@ -373,23 +370,22 @@ async def search_command(client, message: Message):
 
         if not urls:
             await status_msg.edit(
-                "❌ <b>No Results Found</b>\n\n"
-                "Try a different search query.",
-                parse_mode="HTML"
+                "❌ No Results Found\n\n"
+                "Try a different search query."
             )
             return
 
         # Format results with improved styling
         if len(urls) <= 10:
             result_text = (
-                "🔍 <b>Search Results</b>\n\n"
-                f"<b>Query:</b> <code>{query}</code>\n"
-                f"<b>Found:</b> {len(urls)} URLs\n\n"
-                "<b>URLs:</b>\n"
+                "🔍 Search Results\n\n"
+                f"Query: {query}\n"
+                f"Found: {len(urls)} URLs\n\n"
+                "URLs:\n"
             )
             
             for i, url in enumerate(urls, 1):
-                result_text += f"{i}. <code>{url}</code>\n"
+                result_text += f"{i}. {url}\n"
                 
             keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔍 Check All URLs", callback_data=f"check_all_{message.id}")]
@@ -397,8 +393,7 @@ async def search_command(client, message: Message):
             
             await status_msg.edit(
                 result_text,
-                reply_markup=keyboard,
-                parse_mode="HTML"
+                reply_markup=keyboard
             )
         else:
             # Create a text file for bulk results
@@ -411,23 +406,21 @@ async def search_command(client, message: Message):
             await message.reply_document(
                 document=file_name,
                 caption=(
-                    "🔍 <b>Search Results</b>\n\n"
-                    f"<b>Query:</b> <code>{query}</code>\n"
-                    f"<b>Found:</b> {len(urls)} URLs\n\n"
+                    "🔍 Search Results\n\n"
+                    f"Query: {query}\n"
+                    f"Found: {len(urls)} URLs\n\n"
                     "Reply to this file with /txt to check all URLs."
                 ),
-                reply_to_message_id=message.id,
-                parse_mode="HTML"
+                reply_to_message_id=message.id
             )
             os.remove(file_name)
             await status_msg.delete()
 
     except Exception as e:
         await message.reply(
-            f"❌ <b>Error</b>\n\n"
-            f"<code>{str(e)}</code>",
-            reply_to_message_id=message.id,
-            parse_mode="HTML"
+            f"❌ Error\n\n"
+            f"{str(e)}",
+            reply_to_message_id=message.id
         )
 
 @app.on_callback_query(filters.regex("^check_all_"))
@@ -451,9 +444,8 @@ async def check_all_callback(client, callback_query):
     
     # Create a new message for results
     response = await message.reply(
-        "🔍 <b>Checking Gateways...</b>\n"
-        "Please wait while I analyze the URLs.",
-        parse_mode="HTML"
+        "🔍 Checking Gateways...\n"
+        "Please wait while I analyze the URLs."
     )
     
     # Process URLs (reuse the chk_command logic)
@@ -462,68 +454,67 @@ async def check_all_callback(client, callback_query):
         result = await check_gateway(url)
         if "error" in result:
             gateway_info = (
-                f"❌ <b>Error Checking</b>\n"
-                f"<b>URL:</b> <code>{url}</code>\n"
-                f"<b>Error:</b> <code>{result['error']}</code>\n"
-                f"<b>Time:</b> {result['response_time']}s\n\n"
+                f"❌ Error Checking\n"
+                f"URL: {url}\n"
+                f"Error: {result['error']}\n"
+                f"Time: {result['response_time']}s\n\n"
             )
         else:
             gateway_info = (
-                f"✅ <b>Gateway Check</b>\n"
-                f"<b>URL:</b> <code>{url}</code>\n"
-                f"<b>Gateways:</b> {', '.join(result['gateways']) if result['gateways'] else 'None'}\n"
-                f"<b>Captcha:</b> {'Yes' if result['captcha']['detected'] else 'No'} "
+                f"✅ Gateway Check\n"
+                f"URL: {url}\n"
+                f"Gateways: {', '.join(result['gateways']) if result['gateways'] else 'None'}\n"
+                f"Captcha: {'Yes' if result['captcha']['detected'] else 'No'} "
                 f"({', '.join(result['captcha']['types']) if result['captcha']['detected'] else 'N/A'})\n"
-                f"<b>Cloudflare:</b> {'Yes' if result['cloudflare'] else 'No'}\n"
-                f"<b>Security:</b> {', '.join(result['security_features']) if result['security_features'] else 'Basic'}\n"
-                f"<b>Status:</b> {result['status_code']} {result['status_icon']}\n"
-                f"<b>Time:</b> {result['response_time']}s\n\n"
+                f"Cloudflare: {'Yes' if result['cloudflare'] else 'No'}\n"
+                f"Security: {', '.join(result['security_features']) if result['security_features'] else 'Basic'}\n"
+                f"Status: {result['status_code']} {result['status_icon']}\n"
+                f"Time: {result['response_time']}s\n\n"
             )
         
         results.append(gateway_info)
         
-        full_message = "🔍 <b>Gateway Check Results</b>\n\n" + "".join(results)
+        full_message = "🔍 Gateway Check Results\n\n" + "".join(results)
         
         try:
-            await response.edit(full_message, parse_mode="HTML")
+            await response.edit(full_message)
         except Exception:
             # If message is too long, create a new message
-            response = await message.reply(full_message, parse_mode="HTML")
+            response = await message.reply(full_message)
 
 @app.on_message(filters.command("about"))
 async def about_command(client, message: Message):
     about_text = (
-        "✨ <b>𝗚𝗮𝘁𝗲𝘄𝗮𝘆 𝗖𝗵𝗲𝗰𝗸𝗲𝗿 𝗕𝗼𝘁</b> ✨\n\n"
+        "✨ 𝗚𝗮𝘁𝗲𝘄𝗮𝘆 𝗖𝗵𝗲𝗰𝗸𝗲𝗿 𝗕𝗼𝘁 ✨\n\n"
         "Your ultimate tool for payment gateway detection.\n\n"
-        "🚀 <b>Features:</b>\n"
+        "🚀 Features:\n"
         "• Fast multi-URL checking\n"
         "• Bulk URL processing\n"
         "• Advanced gateway detection\n"
         "• Security analysis\n"
         "• URL search functionality\n\n"
-        "💳 <b>Detectable Gateways:</b>\n"
+        "💳 Detectable Gateways:\n"
         "Stripe, Braintree, PayPal, Square, Amazon Pay, Klarna, Adyen, "
         "Authorize.net, Worldpay, Cybersource, 2Checkout, WooCommerce\n\n"
-        "🛡️ <b>Security Checks:</b>\n"
+        "🛡️ Security Checks:\n"
         "• Captcha systems\n"
         "• Cloudflare protection\n"
         "• Payment security features\n\n"
-        "📌 <b>Commands:</b>\n"
+        "📌 Commands:\n"
         "• /chk - Check URLs (up to 15)\n"
         "• /txt - Process URLs from file\n"
         "• /search - Find new URLs\n\n"
         "🔍 Happy gateway hunting!"
     )
-    await message.reply(about_text, reply_to_message_id=message.id, parse_mode="HTML")
+    await message.reply(about_text, reply_to_message_id=message.id)
 
 @app.on_message(filters.command("chk"))
 async def chk_command(client, message: Message):
     if message.from_user.id not in registered_users:
         await message.reply(
-            "🔒 <b>Access Required</b>\n\n"
+            "🔒 Access Required\n\n"
             "Please register first with /register", 
-            reply_to_message_id=message.id,
-            parse_mode="HTML"
+            reply_to_message_id=message.id
         )
         return
 
@@ -538,32 +529,29 @@ async def chk_command(client, message: Message):
 
     if not urls:
         await message.reply(
-            "🔍 <b>URL Checker</b>\n\n"
-            "<b>Usage:</b>\n"
-            "<code>/chk URL1 URL2 ...</code>\n\n"
-            "<b>Examples:</b>\n"
-            "• <code>/chk https://example.com</code>\n"
-            "• <code>/chk https://site1.com https://site2.com</code>",
-            reply_to_message_id=message.id,
-            parse_mode="HTML"
+            "🔍 URL Checker\n\n"
+            "Usage:\n"
+            "/chk URL1 URL2 ...\n\n"
+            "Examples:\n"
+            "• /chk https://example.com\n"
+            "• /chk https://site1.com https://site2.com",
+            reply_to_message_id=message.id
         )
         return
 
     if len(urls) > 15:
         await message.reply(
-            "⚠️ <b>Limit Exceeded</b>\n\n"
+            "⚠️ Limit Exceeded\n\n"
             "Maximum 15 URLs allowed at once.\n"
             "For bulk checking, use /txt command.", 
-            reply_to_message_id=message.id,
-            parse_mode="HTML"
+            reply_to_message_id=message.id
         )
         return
 
     response = await message.reply(
-        "🔍 <b>Gateway Checker</b>\n\n"
+        "🔍 Gateway Checker\n\n"
         "Analyzing URLs... Please wait.", 
-        reply_to_message_id=message.id,
-        parse_mode="HTML"
+        reply_to_message_id=message.id
     )
     
     results = []
@@ -572,57 +560,55 @@ async def chk_command(client, message: Message):
         result = await check_gateway(url)
         if "error" in result:
             gateway_info = (
-                f"❌ <b>Error Checking</b>\n"
-                f"<b>URL:</b> <code>{url}</code>\n"
-                f"<b>Error:</b> <code>{result['error']}</code>\n"
-                f"<b>Time:</b> {result['response_time']}s\n\n"
+                f"❌ Error Checking\n"
+                f"URL: {url}\n"
+                f"Error: {result['error']}\n"
+                f"Time: {result['response_time']}s\n\n"
             )
         else:
             gateway_info = (
-                f"✅ <b>Gateway Check</b>\n"
-                f"<b>URL:</b> <code>{url}</code>\n"
-                f"<b>Gateways:</b> {', '.join(result['gateways']) if result['gateways'] else 'None'}\n"
-                f"<b>Captcha:</b> {'Yes' if result['captcha']['detected'] else 'No'} "
+                f"✅ Gateway Check\n"
+                f"URL: {url}\n"
+                f"Gateways: {', '.join(result['gateways']) if result['gateways'] else 'None'}\n"
+                f"Captcha: {'Yes' if result['captcha']['detected'] else 'No'} "
                 f"({', '.join(result['captcha']['types']) if result['captcha']['detected'] else 'N/A'})\n"
-                f"<b>Cloudflare:</b> {'Yes' if result['cloudflare'] else 'No'}\n"
-                f"<b>Security:</b> {', '.join(result['security_features']) if result['security_features'] else 'Basic'}\n"
-                f"<b>Status:</b> {result['status_code']} {result['status_icon']}\n"
-                f"<b>Time:</b> {result['response_time']}s\n\n"
+                f"Cloudflare: {'Yes' if result['cloudflare'] else 'No'}\n"
+                f"Security: {', '.join(result['security_features']) if result['security_features'] else 'Basic'}\n"
+                f"Status: {result['status_code']} {result['status_icon']}\n"
+                f"Time: {result['response_time']}s\n\n"
             )
         
         results.append(gateway_info)
         
-        full_message = "🔍 <b>Gateway Check Results</b>\n\n" + "".join(results)
+        full_message = "🔍 Gateway Check Results\n\n" + "".join(results)
         
         try:
-            await response.edit(full_message, parse_mode="HTML")
+            await response.edit(full_message)
         except Exception:
             # If message is too long, create a new message
-            response = await message.reply(full_message, parse_mode="HTML")
+            response = await message.reply(full_message)
 
 @app.on_message(filters.command("txt") & filters.reply)
 async def txt_command(client, message: Message):
     if message.from_user.id not in registered_users:
         await message.reply(
-            "🔒 <b>Access Required</b>\n\n"
+            "🔒 Access Required\n\n"
             "Please register first with /register", 
-            reply_to_message_id=message.id,
-            parse_mode="HTML"
+            reply_to_message_id=message.id
         )
         return
 
     replied_message = message.reply_to_message
     if not replied_message.document or not replied_message.document.file_name.endswith('.txt'):
         await message.reply(
-            "📄 <b>Bulk URL Checker</b>\n\n"
-            "<b>Usage:</b>\n"
+            "📄 Bulk URL Checker\n\n"
+            "Usage:\n"
             "1. Upload a .txt file with URLs (one per line)\n"
             "2. Reply to the file with /txt\n\n"
-            "<b>Example file content:</b>\n"
-            "<code>https://example1.com\n"
-            "https://example2.com</code>",
-            reply_to_message_id=message.id,
-            parse_mode="HTML"
+            "Example file content:\n"
+            "https://example1.com\n"
+            "https://example2.com",
+            reply_to_message_id=message.id
         )
         return
 
@@ -634,22 +620,20 @@ async def txt_command(client, message: Message):
 
     if not urls:
         await message.reply(
-            "❌ <b>No Valid URLs</b>\n\n"
+            "❌ No Valid URLs\n\n"
             "The file doesn't contain any valid URLs.\n"
             "Make sure each URL starts with http:// or https://", 
-            reply_to_message_id=message.id,
-            parse_mode="HTML"
+            reply_to_message_id=message.id
         )
         return
 
     total_urls = len(urls)
     response = await message.reply(
-        f"📊 <b>Bulk URL Checker</b>\n\n"
-        f"<b>Total URLs:</b> {total_urls}\n"
-        f"<b>Status:</b> Starting check...\n\n"
+        f"📊 Bulk URL Checker\n\n"
+        f"Total URLs: {total_urls}\n"
+        f"Status: Starting check...\n\n"
         f"This may take some time. Please wait.", 
-        reply_to_message_id=message.id,
-        parse_mode="HTML"
+        reply_to_message_id=message.id
     )
 
     results = {gateway: [] for gateway in GATEWAYS.keys()}
@@ -665,20 +649,20 @@ async def txt_command(client, message: Message):
             percentage = int((checked / total_urls) * 100)
             
             status_lines = [
-                f"📊 <b>Bulk URL Checker</b>\n\n"
-                f"<b>Progress:</b> [{progress_bar}] {percentage}%\n"
-                f"<b>Checked:</b> {checked}/{total_urls}\n"
-                f"<b>Remaining:</b> {remaining}\n\n"
+                f"📊 Bulk URL Checker\n\n"
+                f"Progress: [{progress_bar}] {percentage}%\n"
+                f"Checked: {checked}/{total_urls}\n"
+                f"Remaining: {remaining}\n\n"
             ]
             
             if found_gateways:
-                status_lines.append("<b>Gateways Found:</b>\n")
+                status_lines.append("Gateways Found:\n")
                 for gateway in sorted(found_gateways):
                     status_lines.append(f"• {gateway}: {len(results[gateway])}\n")
             
             status = "".join(status_lines)
             try:
-                await response.edit(status, parse_mode="HTML")
+                await response.edit(status)
             except Exception:
                 pass
 
@@ -706,12 +690,12 @@ async def txt_command(client, message: Message):
         if gateway_urls:
             # Format URLs in a clean, readable format
             if len(gateway_urls) <= 20:
-                url_list = '\n'.join(f"• <code>{url}</code>" for url in gateway_urls)
+                url_list = '\n'.join(f"• {url}" for url in gateway_urls)
                 result_text = (
-                    f"💳 <b>{gateway} Gateways</b>\n\n"
+                    f"💳 {gateway} Gateways\n\n"
                     f"{url_list}\n\n"
                 )
-                await message.reply(result_text, parse_mode="HTML")
+                await message.reply(result_text)
             else:
                 # For large results, create a file
                 file_name = f"{gateway.lower().replace(' ', '_')}_{message.from_user.id}.txt"
@@ -722,27 +706,26 @@ async def txt_command(client, message: Message):
                 await message.reply_document(
                     document=file_name,
                     caption=(
-                        f"💳 <b>{gateway} Gateways</b>\n\n"
-                        f"<b>Total:</b> {len(gateway_urls)} URLs"
-                    ),
-                    parse_mode="HTML"
+                        f"💳 {gateway} Gateways\n\n"
+                        f"Total: {len(gateway_urls)} URLs"
+                    )
                 )
                 os.remove(file_name)
 
     # Send final summary
     final_status = (
-        "✅ <b>Bulk Check Complete</b>\n\n"
-        f"<b>Total URLs:</b> {total_urls}\n\n"
+        "✅ Bulk Check Complete\n\n"
+        f"Total URLs: {total_urls}\n\n"
     )
 
     if found_gateways:
-        final_status += "<b>Gateway Summary:</b>\n"
+        final_status += "Gateway Summary:\n"
         for gateway in sorted(found_gateways):
             final_status += f"• {gateway}: {len(results[gateway])}\n"
     else:
         final_status += "No payment gateways found in the provided URLs."
 
-    await response.edit(final_status, parse_mode="HTML")
+    await response.edit(final_status)
 
 # Create a simple web server for Render
 async def handle(request):
@@ -768,6 +751,9 @@ async def run_bot():
 
 # Main function to run both the web server and the bot
 if __name__ == "__main__":
+    loop = asyncio.get_event_loop()
+    
+    # Run both the web server and the  == "__main__":
     loop = asyncio.get_event_loop()
     
     # Run both the web server and the bot
